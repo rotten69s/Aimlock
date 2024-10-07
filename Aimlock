@@ -1,0 +1,110 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local aimKey = Enum.KeyCode.B -- The key to activate aimlock
+local aimEnabled = false
+local target = nil
+local highlight = nil -- Variable to store the highlight
+
+-- Function to find the closest player
+local function getClosestPlayer()
+	local closestDistance = math.huge
+	local closestPlayer = nil
+
+	for _, otherPlayer in pairs(Players:GetPlayers()) do
+		if otherPlayer ~= player then
+			local character = otherPlayer.Character
+			local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+			if humanoidRootPart then
+				local distance = (humanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+				if distance < closestDistance then
+					closestDistance = distance
+					closestPlayer = otherPlayer
+				end
+			end
+		end
+	end
+
+	return closestPlayer
+end
+
+-- Function to highlight the target
+local function highlightTarget(targetCharacter)
+	if highlight then
+		highlight:Destroy() -- Remove the old highlight, if any
+	end
+
+	if targetCharacter then
+		highlight = Instance.new("Highlight")
+		highlight.Adornee = targetCharacter
+		highlight.FillColor = Color3.new(1, 0, 0) -- Red color for the highlight
+		highlight.OutlineColor = Color3.new(1, 1, 1) -- White outline color
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Parent = targetCharacter
+	end
+end
+
+-- Function to aim at the target player
+local function aimAtTarget(targetCharacter)
+	if targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart") then
+		local targetPos = targetCharacter.HumanoidRootPart.Position
+		camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
+	end
+end
+
+-- Function to handle when the target dies and switch to a new target
+local function onTargetDeath()
+	if aimEnabled then
+		local closestPlayer = getClosestPlayer()
+		if closestPlayer then
+			target = closestPlayer.Character
+			highlightTarget(target) -- Add highlight to the new target
+		else
+			target = nil
+		end
+	end
+end
+
+-- Function to set up tracking for target's death
+local function trackTargetDeath(targetCharacter)
+	if targetCharacter and targetCharacter:FindFirstChild("Humanoid") then
+		local humanoid = targetCharacter:FindFirstChild("Humanoid")
+
+		humanoid.Died:Connect(function()
+			onTargetDeath() -- When the target dies, find a new target
+		end)
+	end
+end
+
+-- Handle input for toggling aimlock
+UserInputService.InputBegan:Connect(function(input)
+	if input.KeyCode == aimKey then
+		aimEnabled = not aimEnabled
+
+		if aimEnabled then
+			local closestPlayer = getClosestPlayer()
+			if closestPlayer then
+				target = closestPlayer.Character
+				highlightTarget(target) -- Add highlight to the target
+				trackTargetDeath(target) -- Track target's death
+			end
+		else
+			target = nil
+			if highlight then
+				highlight:Destroy() -- Remove highlight when aimlock is disabled
+				highlight = nil
+			end
+		end
+	end
+end)
+
+-- Continuously aim at the target if aimlock is enabled
+RunService.RenderStepped:Connect(function()
+	if aimEnabled and target then
+		aimAtTarget(target)
+	end
+end)
